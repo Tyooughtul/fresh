@@ -55,6 +55,7 @@ arboard = "3.4"  # Cross-platform system clipboard access
 proptest = "1.9"
 tempfile = "3.23.0"
 insta = { version = "1.43", features = ["yaml"] }
+vt100 = "0.15"  # Virtual terminal emulator for testing real ANSI output
 
 [profile.release]
 debug = true
