@@ -156,6 +156,10 @@ struct TsRuntimeState {
     >,
     /// Next request ID for async operations
     next_request_id: Rc<RefCell<u64>>,
+    /// Background processes: process_id -> Child handle
+    background_processes: Rc<RefCell<HashMap<u64, tokio::process::Child>>>,
+    /// Next process ID for background processes
+    next_process_id: Rc<RefCell<u64>>,
 }
 
 /// Display a transient message in the editor's status bar
@@ -1067,6 +1071,157 @@ async fn op_fresh_spawn_process(
         stderr,
         exit_code,
     })
+}
+
+/// Result from spawnBackgroundProcess - just the process ID
+#[derive(serde::Serialize)]
+struct BackgroundProcessResult {
+    /// Unique process ID for later reference (kill, status check)
+    process_id: u64,
+}
+
+/// Spawn a long-running background process
+///
+/// Unlike spawnProcess which waits for completion, this starts a process
+/// in the background and returns immediately with a process ID.
+/// Use killProcess(id) to terminate the process later.
+/// Use isProcessRunning(id) to check if it's still running.
+///
+/// @param command - Program name (searched in PATH) or absolute path
+/// @param args - Command arguments (each array element is one argument)
+/// @param cwd - Working directory; null uses editor's cwd
+/// @returns Object with process_id for later reference
+/// @example
+/// const proc = await editor.spawnBackgroundProcess("asciinema", ["rec", "output.cast"]);
+/// // Later...
+/// await editor.killProcess(proc.process_id);
+#[op2(async)]
+#[serde]
+async fn op_fresh_spawn_background_process(
+    state: Rc<RefCell<OpState>>,
+    #[string] command: String,
+    #[serde] args: Vec<String>,
+    #[string] cwd: Option<String>,
+) -> Result<BackgroundProcessResult, deno_core::error::AnyError> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    // Build the command
+    let mut cmd = Command::new(&command);
+    cmd.args(&args);
+    // For background processes, we don't capture output (it runs independently)
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    cmd.stdin(Stdio::null());
+
+    // Set working directory if provided
+    if let Some(ref dir) = cwd {
+        cmd.current_dir(dir);
+    }
+
+    // Spawn the process
+    let child = cmd
+        .spawn()
+        .map_err(|e| deno_core::error::generic_error(format!("Failed to spawn process: {}", e)))?;
+
+    // Get process ID and store the child handle
+    let process_id = {
+        let op_state = state.borrow();
+        if let Some(runtime_state) = op_state.try_borrow::<Rc<RefCell<TsRuntimeState>>>() {
+            let runtime_state = runtime_state.borrow();
+            let mut id = runtime_state.next_process_id.borrow_mut();
+            let process_id = *id;
+            *id += 1;
+            drop(id);
+
+            runtime_state
+                .background_processes
+                .borrow_mut()
+                .insert(process_id, child);
+            process_id
+        } else {
+            return Err(deno_core::error::generic_error(
+                "Runtime state not available",
+            ));
+        }
+    };
+
+    Ok(BackgroundProcessResult { process_id })
+}
+
+/// Kill a background process by ID
+///
+/// Sends SIGTERM to gracefully terminate the process.
+/// Returns true if the process was found and killed, false if not found.
+///
+/// @param process_id - ID returned from spawnBackgroundProcess
+/// @returns true if process was killed, false if not found
+#[op2(async)]
+async fn op_fresh_kill_process(
+    state: Rc<RefCell<OpState>>,
+    #[bigint] process_id: u64,
+) -> Result<bool, deno_core::error::AnyError> {
+    let child_opt = {
+        let op_state = state.borrow();
+        if let Some(runtime_state) = op_state.try_borrow::<Rc<RefCell<TsRuntimeState>>>() {
+            let runtime_state = runtime_state.borrow();
+            let child = runtime_state
+                .background_processes
+                .borrow_mut()
+                .remove(&process_id);
+            child
+        } else {
+            return Ok(false);
+        }
+    };
+
+    if let Some(mut child) = child_opt {
+        // Kill the process
+        let _ = child.kill().await;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Check if a background process is still running
+///
+/// @param process_id - ID returned from spawnBackgroundProcess
+/// @returns true if process is running, false if not found or exited
+#[op2(fast)]
+#[allow(clippy::result_unit_err)]
+fn op_fresh_is_process_running(
+    state: &mut OpState,
+    #[bigint] process_id: u64,
+) -> bool {
+    if let Some(runtime_state) = state.try_borrow::<Rc<RefCell<TsRuntimeState>>>() {
+        let runtime_state = runtime_state.borrow();
+        let mut processes = runtime_state.background_processes.borrow_mut();
+
+        if let Some(child) = processes.get_mut(&process_id) {
+            // Try to check if the process has exited
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    // Process has exited, remove it
+                    processes.remove(&process_id);
+                    false
+                }
+                Ok(None) => {
+                    // Process is still running
+                    true
+                }
+                Err(_) => {
+                    // Error checking status, assume not running
+                    processes.remove(&process_id);
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    }
 }
 
 /// Subscribe to an editor event
@@ -2314,6 +2469,9 @@ extension!(
         op_fresh_get_cursor_line,
         op_fresh_get_all_cursor_positions,
         op_fresh_spawn_process,
+        op_fresh_spawn_background_process,
+        op_fresh_kill_process,
+        op_fresh_is_process_running,
         op_fresh_get_buffer_info,
         op_fresh_list_buffers,
         op_fresh_get_primary_cursor,
@@ -2402,6 +2560,8 @@ impl TypeScriptRuntime {
             event_handlers: event_handlers.clone(),
             pending_responses: Arc::clone(&pending_responses),
             next_request_id: Rc::new(RefCell::new(1)),
+            background_processes: Rc::new(RefCell::new(HashMap::new())),
+            next_process_id: Rc::new(RefCell::new(1)),
         }));
 
         let mut js_runtime = JsRuntime::new(RuntimeOptions {
@@ -2576,6 +2736,15 @@ impl TypeScriptRuntime {
                     // Async operations
                     spawnProcess(command, args = [], cwd = null) {
                         return core.ops.op_fresh_spawn_process(command, args, cwd);
+                    },
+                    spawnBackgroundProcess(command, args = [], cwd = null) {
+                        return core.ops.op_fresh_spawn_background_process(command, args, cwd);
+                    },
+                    killProcess(processId) {
+                        return core.ops.op_fresh_kill_process(processId);
+                    },
+                    isProcessRunning(processId) {
+                        return core.ops.op_fresh_is_process_running(processId);
                     },
                     sendLspRequest(language, method, params = null) {
                         return core.ops.op_fresh_send_lsp_request(language, method, params);
