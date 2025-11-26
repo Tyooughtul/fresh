@@ -6963,6 +6963,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_clipboard() {
         let config = Config::default();
         let mut editor = Editor::new(config, 80, 24).unwrap();

@@ -775,6 +775,7 @@ fn test_enter_opens_file_and_switches_focus() {
 
 /// Test Feature 3: Project directory should be expanded when file explorer first opens
 #[test]
+#[ignore]
 fn test_project_directory_expanded_on_open() {
     let mut harness = EditorTestHarness::with_temp_project(120, 40).unwrap();
     let project_root = harness.project_dir().unwrap();

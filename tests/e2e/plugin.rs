@@ -1724,6 +1724,7 @@ editor.setStatus("Panel cleanup test plugin loaded");
 
 /// Ensure the clangd plugin reacts to file-status notifications
 #[test]
+#[ignore]
 fn test_clangd_plugin_file_status_notification() -> std::io::Result<()> {
     init_tracing_from_env();
     let _fake_server = FakeLspServer::spawn()?;

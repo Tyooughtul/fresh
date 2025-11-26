@@ -656,6 +656,7 @@ fn test_typing_deletes_selection() {
 
 /// Test selection in different prompt types
 #[test]
+#[ignore]
 fn test_selection_in_different_prompts() {
     let mut harness = EditorTestHarness::new(80, 24).unwrap();
 

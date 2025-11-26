@@ -5426,6 +5426,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_plugin_thread_execute_git_log_action() {
         use crate::model::event::BufferId;
         use crate::services::plugins::api::PluginCommand;

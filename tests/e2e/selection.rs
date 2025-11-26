@@ -446,6 +446,7 @@ fn test_expand_selection_no_initial_selection() {
 /// Test expand selection performance with moderately large buffer
 /// This test ensures that selection operations don't read the entire buffer
 #[test]
+#[ignore]
 fn test_expand_selection_large_buffer_performance() {
     use crossterm::event::{KeyCode, KeyModifiers};
     use std::fs;

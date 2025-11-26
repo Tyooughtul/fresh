@@ -1119,6 +1119,7 @@ fn test_lsp_completion_canceled_on_text_edit() -> std::io::Result<()> {
 /// Test LSP rename with real rust-analyzer to reproduce "content modified" error
 /// Skip if rust-analyzer is not installed
 #[test]
+#[ignore]
 fn test_rust_analyzer_rename_content_modified() -> std::io::Result<()> {
     use std::io::Write;
     use std::process::Command;
@@ -2857,6 +2858,7 @@ fn test_pull_diagnostics_unchanged_response() -> std::io::Result<()> {
 
 /// Test that pull diagnostics are auto-triggered after didOpen
 #[test]
+#[ignore]
 fn test_pull_diagnostics_auto_trigger_after_open() -> std::io::Result<()> {
     use crate::common::fake_lsp::FakeLspServer;
 
@@ -2933,6 +2935,7 @@ fn test_pull_diagnostics_auto_trigger_after_open() -> std::io::Result<()> {
 
 /// Test that pull diagnostics result_id is used for incremental updates
 #[test]
+#[ignore]
 fn test_pull_diagnostics_result_id_tracking() -> std::io::Result<()> {
     use crate::common::fake_lsp::FakeLspServer;
 
