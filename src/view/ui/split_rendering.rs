@@ -1567,7 +1567,7 @@ impl SplitRenderer {
         theme: &crate::view::theme::Theme,
     ) -> DecorationContext {
         let highlight_spans = if let Some(highlighter) = &mut state.highlighter {
-            highlighter.highlight_viewport(&state.buffer, viewport_start, viewport_end)
+            highlighter.highlight_viewport(&state.buffer, viewport_start, viewport_end, theme)
         } else {
             Vec::new()
         };

@@ -11,6 +11,7 @@
 
 use crate::config::LARGE_FILE_THRESHOLD_BYTES;
 use crate::model::buffer::Buffer;
+use crate::view::theme::Theme;
 use ratatui::style::Color;
 use std::ops::Range;
 use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter as TSHighlighter};
@@ -18,48 +19,92 @@ use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter 
 /// Maximum bytes to parse in a single operation (for viewport highlighting)
 const MAX_PARSE_BYTES: usize = LARGE_FILE_THRESHOLD_BYTES as usize; // 1MB
 
-/// Default highlight color scheme used by most languages.
-/// Index order: attribute, comment, constant, function, keyword, number, operator, property, string, type, variable
-const DEFAULT_HIGHLIGHT_COLORS: &[Color] = &[
-    Color::Cyan,     // 0: attribute
-    Color::DarkGray, // 1: comment
-    Color::Magenta,  // 2: constant
-    Color::Yellow,   // 3: function
-    Color::Red,      // 4: keyword
-    Color::Magenta,  // 5: number
-    Color::White,    // 6: operator
-    Color::Cyan,     // 7: property
-    Color::Green,    // 8: string
-    Color::Blue,     // 9: type
-    Color::White,    // 10: variable
-];
+/// Highlight category names used for default languages.
+/// The order matches the `configure()` call in `highlight_config()`.
+/// Index 0 = attribute, 1 = comment, 2 = constant, 3 = function, 4 = keyword,
+/// 5 = number, 6 = operator, 7 = property, 8 = string, 9 = type, 10 = variable
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HighlightCategory {
+    Attribute,
+    Comment,
+    Constant,
+    Function,
+    Keyword,
+    Number,
+    Operator,
+    Property,
+    String,
+    Type,
+    Variable,
+}
 
-/// TypeScript-specific highlight color scheme with extended categories.
-const TYPESCRIPT_HIGHLIGHT_COLORS: &[Color] = &[
-    Color::Cyan,      // 0: attribute
-    Color::DarkGray,  // 1: comment
-    Color::Magenta,   // 2: constant
-    Color::Magenta,   // 3: constant.builtin (null, undefined, true, false)
-    Color::Blue,      // 4: constructor
-    Color::Green,     // 5: embedded (template substitutions)
-    Color::Yellow,    // 6: function
-    Color::Yellow,    // 7: function.builtin (require)
-    Color::Yellow,    // 8: function.method
-    Color::Red,       // 9: keyword
-    Color::Magenta,   // 10: number
-    Color::White,     // 11: operator
-    Color::Cyan,      // 12: property
-    Color::White,     // 13: punctuation.bracket
-    Color::White,     // 14: punctuation.delimiter
-    Color::Cyan,      // 15: punctuation.special (template ${})
-    Color::Green,     // 16: string
-    Color::Green,     // 17: string.special (regex)
-    Color::Blue,      // 18: type
-    Color::Blue,      // 19: type.builtin
-    Color::White,     // 20: variable
-    Color::Magenta,   // 21: variable.builtin (this, super, arguments)
-    Color::LightCyan, // 22: variable.parameter
-];
+impl HighlightCategory {
+    /// Map a default language highlight index to a category
+    fn from_default_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(Self::Attribute),
+            1 => Some(Self::Comment),
+            2 => Some(Self::Constant),
+            3 => Some(Self::Function),
+            4 => Some(Self::Keyword),
+            5 => Some(Self::Number),
+            6 => Some(Self::Operator),
+            7 => Some(Self::Property),
+            8 => Some(Self::String),
+            9 => Some(Self::Type),
+            10 => Some(Self::Variable),
+            _ => None,
+        }
+    }
+
+    /// Map a TypeScript highlight index to a category.
+    /// TypeScript has more categories; we map them to the closest theme color.
+    fn from_typescript_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(Self::Attribute),          // attribute
+            1 => Some(Self::Comment),            // comment
+            2 => Some(Self::Constant),           // constant
+            3 => Some(Self::Constant),           // constant.builtin
+            4 => Some(Self::Type),               // constructor
+            5 => Some(Self::String),             // embedded (template substitutions)
+            6 => Some(Self::Function),           // function
+            7 => Some(Self::Function),           // function.builtin
+            8 => Some(Self::Function),           // function.method
+            9 => Some(Self::Keyword),            // keyword
+            10 => Some(Self::Number),            // number
+            11 => Some(Self::Operator),          // operator
+            12 => Some(Self::Property),          // property
+            13 => Some(Self::Operator),          // punctuation.bracket
+            14 => Some(Self::Operator),          // punctuation.delimiter
+            15 => Some(Self::Constant),          // punctuation.special (template ${})
+            16 => Some(Self::String),            // string
+            17 => Some(Self::String),            // string.special (regex)
+            18 => Some(Self::Type),              // type
+            19 => Some(Self::Type),              // type.builtin
+            20 => Some(Self::Variable),          // variable
+            21 => Some(Self::Constant),          // variable.builtin (this, super, arguments)
+            22 => Some(Self::Variable),          // variable.parameter
+            _ => None,
+        }
+    }
+
+    /// Get the color for this category from the theme
+    pub fn color(&self, theme: &Theme) -> Color {
+        match self {
+            Self::Attribute => theme.syntax_constant, // No specific attribute color, use constant
+            Self::Comment => theme.syntax_comment,
+            Self::Constant => theme.syntax_constant,
+            Self::Function => theme.syntax_function,
+            Self::Keyword => theme.syntax_keyword,
+            Self::Number => theme.syntax_constant,
+            Self::Operator => theme.syntax_operator,
+            Self::Property => theme.syntax_variable, // Properties are like variables
+            Self::String => theme.syntax_string,
+            Self::Type => theme.syntax_type,
+            Self::Variable => theme.syntax_variable,
+        }
+    }
+}
 
 /// A highlighted span of text
 #[derive(Debug, Clone)]
@@ -68,6 +113,15 @@ pub struct HighlightSpan {
     pub range: Range<usize>,
     /// Color for this span
     pub color: Color,
+}
+
+/// Internal span used for caching (stores category instead of color)
+#[derive(Debug, Clone)]
+struct CachedSpan {
+    /// Byte range in the buffer
+    range: Range<usize>,
+    /// Highlight category for this span
+    category: HighlightCategory,
 }
 
 /// Language configuration for syntax highlighting
@@ -569,13 +623,12 @@ impl Language {
         }
     }
 
-    /// Map tree-sitter highlight index to color
-    fn highlight_color(&self, index: usize) -> Color {
-        let colors = match self {
-            Language::TypeScript => TYPESCRIPT_HIGHLIGHT_COLORS,
-            _ => DEFAULT_HIGHLIGHT_COLORS,
-        };
-        colors.get(index).copied().unwrap_or(Color::White)
+    /// Map tree-sitter highlight index to a highlight category
+    fn highlight_category(&self, index: usize) -> Option<HighlightCategory> {
+        match self {
+            Language::TypeScript => HighlightCategory::from_typescript_index(index),
+            _ => HighlightCategory::from_default_index(index),
+        }
     }
 }
 
@@ -584,8 +637,8 @@ impl Language {
 struct HighlightCache {
     /// Byte range this cache covers
     range: Range<usize>,
-    /// Highlighted spans within this range
-    spans: Vec<HighlightSpan>,
+    /// Highlighted spans within this range (stores categories for theme-independent caching)
+    spans: Vec<CachedSpan>,
 }
 
 /// Syntax highlighter with incremental viewport-based parsing
@@ -618,12 +671,13 @@ impl Highlighter {
     /// Highlight the visible viewport range
     ///
     /// This only parses the visible lines for instant performance with large files.
-    /// Returns highlighted spans for the requested byte range.
+    /// Returns highlighted spans for the requested byte range, colored according to the theme.
     pub fn highlight_viewport(
         &mut self,
         buffer: &Buffer,
         viewport_start: usize,
         viewport_end: usize,
+        theme: &Theme,
     ) -> Vec<HighlightSpan> {
         // Check if cache is valid for this range
         if let Some(cache) = &self.cache {
@@ -631,14 +685,17 @@ impl Highlighter {
                 && cache.range.end >= viewport_end
                 && self.last_buffer_len == buffer.len()
             {
-                // Cache hit! Filter spans to the requested range
+                // Cache hit! Filter spans to the requested range and resolve colors from theme
                 return cache
                     .spans
                     .iter()
                     .filter(|span| {
                         span.range.start < viewport_end && span.range.end > viewport_start
                     })
-                    .cloned()
+                    .map(|span| HighlightSpan {
+                        range: span.range.clone(),
+                        color: span.category.color(theme),
+                    })
                     .collect();
             }
         }
@@ -663,8 +720,8 @@ impl Highlighter {
         // Extract source bytes from buffer
         let source = buffer.slice_bytes(parse_range.clone());
 
-        // Highlight the source
-        let mut spans = Vec::new();
+        // Highlight the source - store categories for theme-independent caching
+        let mut cached_spans = Vec::new();
         match self.ts_highlighter.highlight(
             &self.config,
             &source,
@@ -681,11 +738,14 @@ impl Highlighter {
                             let span_end = parse_start + end;
 
                             if let Some(highlight_idx) = current_highlight {
-                                let color = self.language.highlight_color(highlight_idx);
-                                spans.push(HighlightSpan {
-                                    range: span_start..span_end,
-                                    color,
-                                });
+                                if let Some(category) =
+                                    self.language.highlight_category(highlight_idx)
+                                {
+                                    cached_spans.push(CachedSpan {
+                                        range: span_start..span_end,
+                                        category,
+                                    });
+                                }
                             }
                         }
                         Ok(HighlightEvent::HighlightStart(s)) => {
@@ -709,14 +769,18 @@ impl Highlighter {
         // Update cache
         self.cache = Some(HighlightCache {
             range: parse_range,
-            spans: spans.clone(),
+            spans: cached_spans.clone(),
         });
         self.last_buffer_len = buffer.len();
 
-        // Filter to requested viewport
-        spans
+        // Filter to requested viewport and resolve colors from theme
+        cached_spans
             .into_iter()
             .filter(|span| span.range.start < viewport_end && span.range.end > viewport_start)
+            .map(|span| HighlightSpan {
+                range: span.range,
+                color: span.category.color(theme),
+            })
             .collect()
     }
 
@@ -849,15 +913,16 @@ mod tests {
     fn test_highlighter_basic() {
         let buffer = Buffer::from_str_test("fn main() {\n    println!(\"Hello\");\n}");
         let mut highlighter = Highlighter::new(Language::Rust).unwrap();
+        let theme = Theme::dark();
 
         // Highlight entire buffer
-        let spans = highlighter.highlight_viewport(&buffer, 0, buffer.len());
+        let spans = highlighter.highlight_viewport(&buffer, 0, buffer.len(), &theme);
 
         // Should have some highlighted spans
         assert!(!spans.is_empty());
 
-        // Keywords like "fn" should be highlighted
-        let has_keyword = spans.iter().any(|s| s.color == Color::Red);
+        // Keywords like "fn" should be highlighted with the theme's keyword color
+        let has_keyword = spans.iter().any(|s| s.color == theme.syntax_keyword);
         assert!(has_keyword, "Should highlight keywords");
     }
 
@@ -871,11 +936,12 @@ mod tests {
         let buffer = Buffer::from_str_test(&content);
 
         let mut highlighter = Highlighter::new(Language::Rust).unwrap();
+        let theme = Theme::dark();
 
         // Highlight only a small viewport in the middle
         let viewport_start = 10000;
         let viewport_end = 10500;
-        let spans = highlighter.highlight_viewport(&buffer, viewport_start, viewport_end);
+        let spans = highlighter.highlight_viewport(&buffer, viewport_start, viewport_end, &theme);
 
         // Should have some spans in the viewport
         assert!(!spans.is_empty());
@@ -895,9 +961,10 @@ mod tests {
     fn test_cache_invalidation() {
         let buffer = Buffer::from_str_test("fn main() {\n    println!(\"Hello\");\n}");
         let mut highlighter = Highlighter::new(Language::Rust).unwrap();
+        let theme = Theme::dark();
 
         // First highlight
-        highlighter.highlight_viewport(&buffer, 0, buffer.len());
+        highlighter.highlight_viewport(&buffer, 0, buffer.len(), &theme);
         assert!(highlighter.cache.is_some());
 
         // Invalidate a range
@@ -905,11 +972,42 @@ mod tests {
         assert!(highlighter.cache.is_none());
 
         // Highlight again to rebuild cache
-        highlighter.highlight_viewport(&buffer, 0, buffer.len());
+        highlighter.highlight_viewport(&buffer, 0, buffer.len(), &theme);
         assert!(highlighter.cache.is_some());
 
         // Invalidate all
         highlighter.invalidate_all();
         assert!(highlighter.cache.is_none());
+    }
+
+    #[test]
+    fn test_theme_affects_colors() {
+        let buffer = Buffer::from_str_test("fn main() {\n    println!(\"Hello\");\n}");
+        let mut highlighter = Highlighter::new(Language::Rust).unwrap();
+
+        // Highlight with dark theme
+        let dark_theme = Theme::dark();
+        let dark_spans = highlighter.highlight_viewport(&buffer, 0, buffer.len(), &dark_theme);
+
+        // Highlight with light theme (cache should still work, colors should change)
+        let light_theme = Theme::light();
+        let light_spans = highlighter.highlight_viewport(&buffer, 0, buffer.len(), &light_theme);
+
+        // Both should have spans
+        assert!(!dark_spans.is_empty());
+        assert!(!light_spans.is_empty());
+
+        // Keywords should have different colors in different themes
+        let dark_keyword = dark_spans.iter().find(|s| s.color == dark_theme.syntax_keyword);
+        let light_keyword = light_spans.iter().find(|s| s.color == light_theme.syntax_keyword);
+
+        assert!(dark_keyword.is_some(), "Dark theme should have keyword");
+        assert!(light_keyword.is_some(), "Light theme should have keyword");
+
+        // The keyword colors should be different between themes
+        assert_ne!(
+            dark_theme.syntax_keyword, light_theme.syntax_keyword,
+            "Themes should have different keyword colors"
+        );
     }
 }
