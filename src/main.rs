@@ -114,7 +114,11 @@ fn main() -> io::Result<()> {
         match config::Config::load_from_file(config_path) {
             Ok(cfg) => cfg,
             Err(e) => {
-                eprintln!("Error: Failed to load config from {}: {}", config_path.display(), e);
+                eprintln!(
+                    "Error: Failed to load config from {}: {}",
+                    config_path.display(),
+                    e
+                );
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
             }
         }
