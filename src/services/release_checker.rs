@@ -41,9 +41,9 @@ impl InstallMethod {
     /// Get the update command for this installation method
     pub fn update_command(&self) -> Option<&'static str> {
         match self {
-            InstallMethod::Homebrew => Some("brew upgrade fresh"),
+            InstallMethod::Homebrew => Some(" brew upgrade fresh-editor"),
             InstallMethod::Cargo => Some("cargo install fresh-editor"),
-            InstallMethod::Npm => Some("npm update -g fresh-editor"),
+            InstallMethod::Npm => Some("npm update -g @fresh-editor/fresh-editor"),
             InstallMethod::Aur => Some("yay -Syu fresh-editor  # or use your AUR helper"),
             InstallMethod::PackageManager => Some("Update using your system package manager"),
             InstallMethod::Unknown => None,
