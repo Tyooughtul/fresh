@@ -41,6 +41,7 @@ Fresh is engineered for speed. It delivers a low-latency experience, with text a
 | Arch Linux | [AUR](#arch-linux-aur) |
 | Debian/Ubuntu | [.deb](#debianubuntu-deb) |
 | Fedora/RHEL | [.rpm](#fedorarhelopensuse-rpm) |
+| Linux (any distro) | [Flatpak](#flatpak) |
 | All platforms | [Pre-built binaries](#pre-built-binaries) |
 | npm | [npm / npx](#npm) |
 | Rust users (Fast) | [cargo-binstall](#using-cargo-binstall) |
@@ -102,6 +103,17 @@ curl -sL $(curl -s https://api.github.com/repos/sinelaw/fresh/releases/latest | 
 ```
 
 Or download the `.rpm` file manually from the [releases page](https://github.com/sinelaw/fresh/releases).
+
+### Flatpak
+
+Download the `.flatpak` bundle from the [releases page](https://github.com/sinelaw/fresh/releases) and install:
+
+```bash
+flatpak install --user fresh-editor-VERSION-x86_64.flatpak
+flatpak run io.github.sinelaw.fresh
+```
+
+See [flatpak/README.md](flatpak/README.md) for building from source.
 
 ### Pre-built binaries
 

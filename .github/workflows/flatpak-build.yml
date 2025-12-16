@@ -1,0 +1,79 @@
+# Flatpak build workflow - packages pre-built binary as a Flatpak bundle
+# Called from the release workflow after the build job completes
+
+name: Flatpak Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to build'
+        required: true
+        type: string
+
+jobs:
+  build-flatpak:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download pre-built binary
+        uses: actions/download-artifact@v7
+        with:
+          name: artifacts-x86_64-unknown-linux-gnu
+          path: artifacts/
+
+      - name: Extract pre-built binary
+        run: |
+          mkdir -p target/release
+          cd artifacts
+          tar -xJf fresh-editor-x86_64-unknown-linux-gnu.tar.xz
+          cp fresh-editor-x86_64-unknown-linux-gnu/fresh ../target/release/
+
+      - name: Install Flatpak and flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Add Flathub repository
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install runtime
+        run: |
+          flatpak install --user -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+      - name: Update metainfo version
+        run: |
+          VERSION="${{ inputs.version }}"
+          DATE=$(date +%Y-%m-%d)
+          sed -i "s/version=\"[^\"]*\"/version=\"$VERSION\"/" flatpak/io.github.sinelaw.fresh.metainfo.xml
+          sed -i "s/date=\"[^\"]*\"/date=\"$DATE\"/" flatpak/io.github.sinelaw.fresh.metainfo.xml
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --force-clean --repo=repo build flatpak/io.github.sinelaw.fresh.yml
+
+      - name: Create Flatpak bundle
+        run: |
+          VERSION="${{ inputs.version }}"
+          flatpak build-bundle repo fresh-editor-${VERSION}-x86_64.flatpak io.github.sinelaw.fresh
+
+      - name: Generate checksum
+        run: |
+          VERSION="${{ inputs.version }}"
+          sha256sum fresh-editor-${VERSION}-x86_64.flatpak > fresh-editor-${VERSION}-x86_64.flatpak.sha256
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: artifacts-flatpak
+          path: |
+            fresh-editor-*.flatpak
+            fresh-editor-*.flatpak.sha256
+
+      - name: Test Flatpak installation
+        run: |
+          VERSION="${{ inputs.version }}"
+          flatpak install --user -y fresh-editor-${VERSION}-x86_64.flatpak
+          flatpak run io.github.sinelaw.fresh --version
