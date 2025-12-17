@@ -40,10 +40,10 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-log_info() { echo "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo "${GREEN}[SUCCESS]${NC} $1"; }
-log_warn() { echo "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo "${RED}[ERROR]${NC} $1"; exit 1; }
+log_info()    { printf "${BLUE}[INFO]${NC} %s\n" "$1"; }
+log_success() { printf "${GREEN}[SUCCESS]${NC} %s\n" "$1"; }
+log_warn()    { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; }
+log_error()   { printf "${RED}[ERROR]${NC} %s\n" "$1"; exit 1; }
 
 check_cmd() { command -v "$1" >/dev/null 2>&1; }
 
