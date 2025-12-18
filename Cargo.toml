@@ -1,6 +1,6 @@
 [package]
 name = "fresh-editor"
-version = "0.1.53"
+version = "0.1.54"
 authors = ["Noam Lewis"]
 edition = "2021"
 default-run = "fresh"
@@ -171,12 +171,15 @@ section = "editors"
 priority = "optional"
 depends = "$auto"
 assets = [
-    ["target/release/fresh", "usr/bin/", "755"],
+    # Binary goes in /usr/share/fresh-editor/ alongside plugins
+    ["target/release/fresh", "usr/share/fresh-editor/", "755"],
     ["README.md", "usr/share/doc/fresh-editor/", "644"],
     ["plugins/*", "usr/share/fresh-editor/plugins/", "644"],
     ["plugins/lib/*", "usr/share/fresh-editor/plugins/lib/", "644"],
     ["plugins/examples/*", "usr/share/fresh-editor/plugins/examples/", "644"],
 ]
+# Maintainer scripts to create/remove symlink at /usr/bin/fresh
+maintainer-scripts = "debian/"
 extended-description = """
 Fresh is a lightweight, fast terminal-based text editor with LSP support
 and TypeScript plugins. It provides syntax highlighting, code completion,
@@ -185,7 +188,8 @@ and other IDE-like features in a minimal terminal interface."""
 # RPM package configuration for cargo-generate-rpm
 [package.metadata.generate-rpm]
 assets = [
-    { source = "target/release/fresh", dest = "/usr/bin/fresh", mode = "755" },
+    # Binary goes in /usr/share/fresh-editor/ alongside plugins
+    { source = "target/release/fresh", dest = "/usr/share/fresh-editor/fresh", mode = "755" },
     { source = "README.md", dest = "/usr/share/doc/fresh-editor/README.md", mode = "644" },
     { source = "plugins/*.ts", dest = "/usr/share/fresh-editor/plugins/", mode = "644" },
     { source = "plugins/*.json", dest = "/usr/share/fresh-editor/plugins/", mode = "644" },
@@ -193,3 +197,6 @@ assets = [
     { source = "plugins/lib/*", dest = "/usr/share/fresh-editor/plugins/lib/", mode = "644" },
     { source = "plugins/examples/*", dest = "/usr/share/fresh-editor/plugins/examples/", mode = "644" },
 ]
+# Scriptlets to create/remove symlink at /usr/bin/fresh
+post_install_script = "ln -sf /usr/share/fresh-editor/fresh /usr/bin/fresh"
+pre_uninstall_script = "rm -f /usr/bin/fresh"

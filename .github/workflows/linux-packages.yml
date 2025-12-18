@@ -124,8 +124,21 @@ jobs:
           dpkg -L fresh-editor
 
           echo ""
-          echo "=== Testing binary ==="
+          echo "=== Verifying binary location ==="
+          ls -la /usr/share/fresh-editor/fresh
+          test -x /usr/share/fresh-editor/fresh || { echo "Binary not executable"; exit 1; }
+
+          echo ""
+          echo "=== Verifying symlink ==="
+          ls -la /usr/bin/fresh
+          test -L /usr/bin/fresh || { echo "/usr/bin/fresh is not a symlink"; exit 1; }
+          readlink /usr/bin/fresh | grep -q "/usr/share/fresh-editor/fresh" || { echo "Symlink points to wrong location"; exit 1; }
+
+          echo ""
+          echo "=== Testing binary via symlink ==="
           fresh --version
+          /usr/bin/fresh --version
+          /usr/share/fresh-editor/fresh --version
 
           echo ""
           echo "=== Checking plugins directory ==="
@@ -133,8 +146,16 @@ jobs:
           ls -la /usr/share/fresh-editor/plugins/lib/
 
           echo ""
+          echo "=== Verifying binary and plugins are in same directory ==="
+          test -f /usr/share/fresh-editor/fresh && test -d /usr/share/fresh-editor/plugins || { echo "Binary and plugins not in same dir"; exit 1; }
+
+          echo ""
           echo "=== Testing uninstall ==="
           apt-get remove -y fresh-editor
+
+          echo ""
+          echo "=== Verifying symlink removed ==="
+          test ! -e /usr/bin/fresh || { echo "Symlink not removed after uninstall"; exit 1; }
 
           echo ""
           echo "deb package test PASSED on ${{ matrix.name }}"
@@ -176,8 +197,21 @@ jobs:
           rpm -ql fresh-editor
 
           echo ""
-          echo "=== Testing binary ==="
+          echo "=== Verifying binary location ==="
+          ls -la /usr/share/fresh-editor/fresh
+          test -x /usr/share/fresh-editor/fresh || { echo "Binary not executable"; exit 1; }
+
+          echo ""
+          echo "=== Verifying symlink ==="
+          ls -la /usr/bin/fresh
+          test -L /usr/bin/fresh || { echo "/usr/bin/fresh is not a symlink"; exit 1; }
+          readlink /usr/bin/fresh | grep -q "/usr/share/fresh-editor/fresh" || { echo "Symlink points to wrong location"; exit 1; }
+
+          echo ""
+          echo "=== Testing binary via symlink ==="
           fresh --version
+          /usr/bin/fresh --version
+          /usr/share/fresh-editor/fresh --version
 
           echo ""
           echo "=== Checking plugins directory ==="
@@ -185,8 +219,16 @@ jobs:
           ls -la /usr/share/fresh-editor/plugins/lib/
 
           echo ""
+          echo "=== Verifying binary and plugins are in same directory ==="
+          test -f /usr/share/fresh-editor/fresh && test -d /usr/share/fresh-editor/plugins || { echo "Binary and plugins not in same dir"; exit 1; }
+
+          echo ""
           echo "=== Testing uninstall ==="
           dnf remove -y fresh-editor
+
+          echo ""
+          echo "=== Verifying symlink removed ==="
+          test ! -e /usr/bin/fresh || { echo "Symlink not removed after uninstall"; exit 1; }
 
           echo ""
           echo "rpm package test PASSED on ${{ matrix.name }}"
