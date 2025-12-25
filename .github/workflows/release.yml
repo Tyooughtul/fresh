@@ -105,7 +105,7 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             archive_ext: tar.xz
-          - target: x86_64-pc-windows-gnu
+          - target: x86_64-pc-windows-msvc
             os: windows-2022
             archive_ext: zip
     runs-on: ${{ matrix.os }}
@@ -131,19 +131,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Install MinGW (Windows GNU)
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        shell: pwsh
-        run: |
-          # MinGW is pre-installed on windows-2022 runners
-          # Just verify it's available
-          gcc --version
-
       - name: Build release binary
         shell: bash
         run: |
           if [ "${{ matrix.cross }}" = "true" ] && [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          # Static link the C runtime on Windows MSVC to avoid vcruntime DLL dependency
+          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            export RUSTFLAGS="-C target-feature=+crt-static"
           fi
           # embed-plugins is now a default feature - plugins are always embedded as fallback
           cargo build --release --target ${{ matrix.target }}

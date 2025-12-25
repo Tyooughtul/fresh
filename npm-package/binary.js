@@ -9,7 +9,7 @@ function getBinaryInfo() {
     'darwin-arm64': { target: 'aarch64-apple-darwin', ext: 'tar.xz' },
     'linux-x64': { target: 'x86_64-unknown-linux-gnu', ext: 'tar.xz' },
     'linux-arm64': { target: 'aarch64-unknown-linux-gnu', ext: 'tar.xz' },
-    'win32-x64': { target: 'x86_64-pc-windows-gnu', ext: 'zip' }
+    'win32-x64': { target: 'x86_64-pc-windows-msvc', ext: 'zip' }
   };
 
   const key = `${platform}-${arch}`;
